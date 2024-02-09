@@ -1,0 +1,84 @@
+const byte LED_PIN = 13;
+const byte METER_PIN = A4;
+volatile double timerFrequency = 0.5; // Default blink frequency of 0.5 Hz (once every 2 seconds)
+
+void setup()
+{
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(METER_PIN, INPUT);
+  
+  Serial.begin(9600);
+  
+  startTimer(timerFrequency);
+}
+
+void loop()
+{ 
+  // Your main code logic goes here
+}
+
+void startTimer(double timerFreq){
+  noInterrupts();
+  
+  // Calculate the value for OCR1A and set TCCR1B register
+  double frequency = 1000000.0 / timerFreq; // Frequency in microseconds
+  double prescalerValues[] = {1, 8, 64, 256, 1024};
+  double prescaler = 0;
+  double counts = 0;
+  
+  // Find the appropriate prescaler and counts
+  for(int i=0; i<5; i++){
+    counts = frequency / prescalerValues[i];
+    if(counts <= 65536){
+      prescaler = prescalerValues[i];
+      break;
+    }
+  }
+
+  // Set the registers
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = 0;
+
+  // Set the appropriate prescaler
+  if(prescaler == 1){
+    TCCR1B |= (1 << CS10);
+  }
+  else if(prescaler == 8){
+    TCCR1B |= (1 << CS11);
+  }
+  else if(prescaler == 64){
+    TCCR1B |= (1 << CS11) | (1 << CS10);
+  }
+  else if(prescaler == 256){
+    TCCR1B |= (1 << CS12);
+  }
+  else if(prescaler == 1024){
+    TCCR1B |= (1 << CS12) | (1 << CS10);
+  }
+
+  // Calculate the OCR1A value
+  OCR1A = round(counts) - 1;
+  
+  // Enable the compare match interrupt
+  TIMSK1 |= (1 << OCIE1A);
+
+  interrupts();
+}
+
+ISR(TIMER1_COMPA_vect){
+   digitalWrite(LED_PIN, digitalRead(LED_PIN) ^ 1);
+   
+   // Read the potentiometer value
+   int potValue = analogRead(METER_PIN);
+   
+   // Map potentiometer value to frequency range (1-10 Hz)
+   double mappedValue = map(potValue, 0, 1023, 1, 10); 
+   
+   // Ensure the LED blinks every 2 seconds
+   if (mappedValue > 0.5) {
+     timerFrequency = mappedValue;
+   } else {
+     timerFrequency = 0.5; // Default blink frequency of 0.5 Hz (once every 2 seconds)
+   }
+}
